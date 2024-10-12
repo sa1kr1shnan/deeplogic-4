@@ -1,0 +1,150 @@
+import json
+import re
+
+def generate_optimized_invoice_template():
+    template = {
+        "header": {
+            "invoice_number": {
+                "rules": [
+                    {"pattern": r"(?i)invoice\s*(?:no|num|number|#)[:.]?\s*(\w+)"},
+                    {"pattern": r"(?i)(?:no|num|number|#)[:.]?\s*(\w+)"}
+                ]
+            },
+            "invoice_date": {
+                "rules": [
+                    {"pattern": r"(?i)(?:date|issued|invoice\s*date)[:.]?\s*(\d{1,2}[-./]\d{1,2}[-./]\d{2,4})"},
+                    {"pattern": r"(?i)(\d{1,2}[-./]\d{1,2}[-./]\d{2,4})"}
+                ]
+            },
+            "customer_number": {
+                "rules": [
+                    {"pattern": r"(?i)(?:customer|client|account)\s*(?:no|num|number|#)[:.]?\s*(\w+)"}
+                ]
+            },
+            "invoice_period": {
+                "rules": [
+                    {"pattern": r"(?i)(?:period|duration|dates)[:.]?\s*(.+)"}
+                ]
+            },
+            "vendor_info": {
+                "rules": [
+                    {"pattern": r"(.+?)(?=\n.+\n.+\n)"},  # Assumes vendor info is at the top
+                    {"fields": ["name", "address", "vat_number"]}
+                ]
+            },
+            "customer_info": {
+                "rules": [
+                    {"pattern": r"(?<=\n\n)(.+?\n.+?\n.+?)(?=\n\n)"},  # Assumes customer info block
+                    {"fields": ["name", "contact", "address"]}
+                ]
+            }
+        },
+        "service_description": {
+            "rules": [
+                {"pattern": r"(?i)service\s*description.+?(?=\n\s*total)", "flags": re.DOTALL},
+                {"columns": ["description", "amount", "quantity"]}
+            ]
+        },
+        "totals": {
+            "subtotal": {
+                "rules": [
+                    {"pattern": r"(?i)(?:subtotal|total|sum)[:.]?\s*([0-9,.]+)"}
+                ]
+            },
+            "vat": {
+                "rules": [
+                    {"pattern": r"(?i)vat\s*(\d+)%\s*([0-9,.]+)"},
+                    {"fields": ["rate", "amount"]}
+                ]
+            },
+            "gross_amount": {
+                "rules": [
+                    {"pattern": r"(?i)(?:gross|total)\s*(?:amount|sum)[:.]?\s*([0-9,.]+)"}
+                ]
+            }
+        },
+        "transaction_fees": {
+            "rules": [
+                {"pattern": r"(?i)T\d[:.].*?G\d[:.].*?(?=\n\n)", "flags": re.DOTALL},
+                {"columns": ["category", "price"]}
+            ]
+        },
+        "user_accounts": {
+            "rules": [
+                {"pattern": r"(?i)user-account-.*?(?=\n\n)", "flags": re.DOTALL},
+                {"columns": ["account", "query_counts", "total_amount"]}
+            ]
+        },
+        "query_references": {
+            "rules": [
+                {"pattern": r"(?i)query\s*reference:.*?(?=\n\n)", "flags": re.DOTALL},
+                {"columns": ["reference", "query_counts", "total_amount"]}
+            ]
+        },
+        "payment_info": {
+            "terms": {
+                "rules": [
+                    {"pattern": r"(?i)terms\s*of\s*payment:(.+?)(?=\n\n)"}
+                ]
+            },
+            "bank_details": {
+                "rules": [
+                    {"pattern": r"(?i)iban[:.]\s*(\w+)"},
+                    {"pattern": r"(?i)bic[:.]\s*(\w+)"}
+                ]
+            }
+        },
+        "additional_info": {
+            "website": {
+                "rules": [
+                    {"pattern": r"(https?://\S+)"}
+                ]
+            }
+        }
+    }
+
+    return json.dumps(template, indent=2)
+
+# Efficiency enhancement: Compile regex patterns
+def compile_regex_patterns(template):
+    for section in template.values():
+        if isinstance(section, dict):
+            compile_regex_patterns(section)
+        elif isinstance(section, list):
+            for item in section:
+                if 'pattern' in item:
+                    item['compiled_pattern'] = re.compile(item['pattern'], item.get('flags', 0))
+
+# Generate and optimize the template
+template = json.loads(generate_optimized_invoice_template())
+compile_regex_patterns(template)
+
+# Efficiency enhancement: Cache frequently accessed data
+def create_lookup_cache(template):
+    cache = {}
+    for section, rules in template.items():
+        if isinstance(rules, dict) and 'rules' in rules:
+            cache[section] = [rule['compiled_pattern'] for rule in rules['rules'] if 'compiled_pattern' in rule]
+    return cache
+
+lookup_cache = create_lookup_cache(template)
+
+# Example usage of the optimized template
+def extract_data(text, template, cache):
+    extracted_data = {}
+    for section, patterns in cache.items():
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                extracted_data[section] = match.group(1)
+                break
+    return extracted_data
+
+# Printing the optimized template
+print(json.dumps(template, indent=2))
+
+
+with open('optimized_invoice_template.json', 'w') as f:
+    json.dump(template, f, indent=2)
+
+print("\nOptimized template generated and saved.")
