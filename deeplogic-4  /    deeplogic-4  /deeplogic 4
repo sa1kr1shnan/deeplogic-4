@@ -1,4 +1,4 @@
-import json
+mport json
 import re
 
 def generate_optimized_invoice_template():
@@ -103,44 +103,43 @@ def generate_optimized_invoice_template():
         }
     }
 
-    return json.dumps(template, indent=2)
-
+    return template
 # Efficiency enhancement: Compile regex patterns
 def compile_regex_patterns(template):
-    for section in template.values():
-        if isinstance(section, dict):
-            compile_regex_patterns(section)
-        elif isinstance(section, list):
-            for item in section:
-                if 'pattern' in item:
-                    item['compiled_pattern'] = re.compile(item['pattern'], item.get('flags', 0))
+    compiled_patterns = {}
+    for section, content in template.items():
+        if isinstance(content, dict):
+            if 'rules' in content:
+                compiled_patterns[section] = []
+                for rule in content['rules']:
+                    if 'pattern' in rule:
+                        flags = rule.get('flags', 0)
+                        compiled_patterns[section].append(re.compile(rule['pattern'], flags))
+            else:
+                compiled_patterns[section] = compile_regex_patterns(content)
+    return compiled_patterns
 
-# Generate and optimize the template
-template = json.loads(generate_optimized_invoice_template())
-compile_regex_patterns(template)
+# Generating the template
+template = generate_optimized_invoice_template()
 
-# Efficiency enhancement: Cache frequently accessed data
-def create_lookup_cache(template):
-    cache = {}
-    for section, rules in template.items():
-        if isinstance(rules, dict) and 'rules' in rules:
-            cache[section] = [rule['compiled_pattern'] for rule in rules['rules'] if 'compiled_pattern' in rule]
-    return cache
-
-lookup_cache = create_lookup_cache(template)
+# Compiling patterns (separate from the template)
+compiled_patterns = compile_regex_patterns(template)
 
 # Example usage of the optimized template
-def extract_data(text, template, cache):
+def extract_data(text, template, compiled_patterns):
     extracted_data = {}
-    for section, patterns in cache.items():
-        for pattern in patterns:
-            match = pattern.search(text)
-            if match:
-                extracted_data[section] = match.group(1)
-                break
+    for section, content in template.items():
+        if isinstance(content, dict) and 'rules' in content:
+            for pattern in compiled_patterns[section]:
+                match = pattern.search(text)
+                if match:
+                    extracted_data[section] = match.group(1)
+                    break
+        elif isinstance(content, dict):
+            extracted_data[section] = extract_data(text, content, compiled_patterns[section])
     return extracted_data
 
-# Printing the optimized template
+# Printing the JSON-serializable template
 print(json.dumps(template, indent=2))
 
 
@@ -148,3 +147,18 @@ with open('optimized_invoice_template.json', 'w') as f:
     json.dump(template, f, indent=2)
 
 print("\nOptimized template generated and saved.")
+
+# Example of how to use the extraction function
+sample_text = """
+Invoice No: INV-12345
+Date: 15/03/2024
+Customer: ACME Corp
+Total Amount: $1,234.56
+VAT 20%: $246.91
+Gross Total: $1,481.47
+"""
+
+extracted_data = extract_data(sample_text, template, compiled_patterns)
+print("\nExtracted Data:")
+print(json.dumps(extracted_data, indent=2))
+
